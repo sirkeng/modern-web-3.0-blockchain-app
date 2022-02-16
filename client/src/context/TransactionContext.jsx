@@ -12,16 +12,14 @@ const getEthereumContract = () => {
     const signer = provider.getSigner();
     const transactionContract = new ethers.Contract(contractAddress, contractABI, signer);
 
-    console.log({
-        provider,
-        signer,
-        transactionContract
-    });
+    return transactionContract;
 }
 
 export const TransactionProvider = ({ children }) => {
     const [currentAccount, setCurrentAccount] = useState('');
     const [formData, setFormData] = useState({ addressTo: '', amount: '', keyword: '', message: '' });
+    const [isLoading, setIsLoading] = useState(false);
+    const [transactionCount, setTransactionCount] = useState(localStorage.getItem('transactionCount'));
 
     const handleChange = (e, name) => {
         setFormData((prevState) => ({ ...prevState, [name]: e.target.value }))
@@ -32,7 +30,7 @@ export const TransactionProvider = ({ children }) => {
             if(!ethereum) return alert('Please install metamask');
         
             const accounts = await ethereum.request({ method: 'eth_accounts' });
-  
+            // console.log('accounts--->', accounts)
             if(accounts.length) {
                 setCurrentAccount(accounts[0]);
         
@@ -67,8 +65,30 @@ export const TransactionProvider = ({ children }) => {
 
             // get the data from the form...
             const { addressTo, amount, keyword, message } = formData;
+            const transactionContract = getEthereumContract();
+            const parsedAmount = ethers.utils.parseEther(amount)
 
-            getEthereumContract();
+            await ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [{
+                    from: currentAccount,
+                    to: addressTo,
+                    gas: '0x5208', // (pass value is Hexadecimal) 1.hex to decimal get (21000 GWEI) then 2.convert 21000 GWEI to Ether https://www.rapidtables.com/convert/number/hex-to-decimal.html, https://eth-converter.com/
+                    value: parsedAmount._hex, // (pass value is Hexadecimal)
+                }]
+            });
+
+            const transactionHash = await transactionContract.addToBlockchain(addressTo, parsedAmount, message, keyword);
+
+            setIsLoading(true);
+            console.log(`Loading - ${transactionHash.hash}`);
+            await transactionHash.wait();
+            setIsLoading(false);
+            console.log(`Success - ${transactionHash.hash}`);
+
+            const transactionCount = await transactionContract.getTransactionCount();
+
+            setTransactionCount(transactionCount.toNumber());
         } catch (error) {
             console.log(error)
 
